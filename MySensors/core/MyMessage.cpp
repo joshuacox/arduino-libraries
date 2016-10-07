@@ -21,16 +21,33 @@
 #include "MyMessage.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
-
-MyMessage::MyMessage() {
-	destination = 0; // Gateway is default destination
+MyMessage::MyMessage()
+{
+    clear();
 }
 
-MyMessage::MyMessage(uint8_t _sensor, uint8_t _type) {
-	destination = 0; // Gateway is default destination
+MyMessage::MyMessage(uint8_t _sensor, uint8_t _type)
+{
+    clear();
 	sensor = _sensor;
-	type = _type;
+	type   = _type;
+}
+
+void MyMessage::clear()
+{
+    last                = 0u;
+    sender              = 0u;
+	destination         = 0u;       // Gateway is default destination
+    version_length      = 0u;
+    command_ack_payload = 0u;
+    type                = 0u;
+    sensor              = 0u;
+    (void)memset(data, 0u, sizeof(data));
+
+	// set message protocol version
+	miSetVersion(PROTOCOL_VERSION);
 }
 
 bool MyMessage::isAck() const {
@@ -100,7 +117,7 @@ char* MyMessage::getString(char *buffer) const {
 		} else if (payloadType == P_ULONG32) {
 			ultoa(ulValue, buffer, 10);
 		} else if (payloadType == P_FLOAT32) {
-			dtostrf(fValue,2,min(fPrecision, 8),buffer);
+			dtostrf(fValue,2,min(fPrecision, (uint8_t)8),buffer);
 		} else if (payloadType == P_CUSTOM) {
 			return getCustomString(buffer);
 		}
@@ -193,14 +210,15 @@ MyMessage& MyMessage::setDestination(uint8_t _destination) {
 
 // Set payload
 MyMessage& MyMessage::set(void* value, uint8_t length) {
+	uint8_t payloadLength = value == NULL ? 0 : min(length, (uint8_t)MAX_PAYLOAD);
+	miSetLength(payloadLength); 
 	miSetPayloadType(P_CUSTOM);
-	miSetLength(length);
-	memcpy(data, value, min(length, MAX_PAYLOAD));
+	memcpy(data, value, payloadLength);
 	return *this;
 }
 
 MyMessage& MyMessage::set(const char* value) {
-	uint8_t length = value == NULL ? 0 : min(strlen(value), MAX_PAYLOAD);
+	uint8_t length = value == NULL ? 0 : min(strlen(value), (size_t)MAX_PAYLOAD);
 	miSetLength(length);
 	miSetPayloadType(P_STRING);
 	if (length) {		

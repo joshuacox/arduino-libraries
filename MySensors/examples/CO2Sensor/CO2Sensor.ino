@@ -45,8 +45,7 @@
 #define MY_RADIO_NRF24
 //#define MY_RADIO_RFM69
 
-#include <SPI.h>
-#include <MySensor.h> 
+#include <MySensors.h> 
 
 #define CHILD_ID_AIQ 0
 #define AIQ_SENSOR_ANALOG_PIN 6

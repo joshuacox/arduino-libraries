@@ -21,15 +21,34 @@
 
 #include "MyHwATMega328.h"
 
-int8_t pinIntTrigger = 0;
+#define INVALID_INTERRUPT_NUM	(0xFFu)
 
-void wakeUp()	 //place to send the interrupts
+volatile uint8_t _wokeUpByInterrupt = INVALID_INTERRUPT_NUM;    // Interrupt number that woke the mcu.
+volatile uint8_t _wakeUp1Interrupt  = INVALID_INTERRUPT_NUM;    // Interrupt number for wakeUp1-callback.
+volatile uint8_t _wakeUp2Interrupt  = INVALID_INTERRUPT_NUM;    // Interrupt number for wakeUp2-callback.
+
+void wakeUp1()	 //place to send the interrupts
 {
-	pinIntTrigger = 1;
+	detachInterrupt(_wakeUp1Interrupt);
+	if (_wakeUp2Interrupt != INVALID_INTERRUPT_NUM)
+    {
+        detachInterrupt(_wakeUp2Interrupt);
+    }
+	_wokeUpByInterrupt = _wakeUp1Interrupt;
 }
 void wakeUp2()	 //place to send the second interrupts
 {
-	pinIntTrigger = 2;
+	detachInterrupt(_wakeUp2Interrupt);
+	if (_wakeUp1Interrupt != INVALID_INTERRUPT_NUM)
+    {
+        detachInterrupt(_wakeUp1Interrupt);
+    }
+	_wokeUpByInterrupt = _wakeUp2Interrupt;
+}
+
+bool interruptWakeUp()
+{
+    return _wokeUpByInterrupt != INVALID_INTERRUPT_NUM;
 }
 
 // Watchdog Timer interrupt service routine. This routine is required
@@ -39,7 +58,6 @@ ISR (WDT_vect)
 }
 
 void hwPowerDown(period_t period) {
-
 	// disable ADC for power saving
 	ADCSRA &= ~(1 << ADEN);
 	// save WDT settings
@@ -56,11 +74,12 @@ void hwPowerDown(period_t period) {
 	set_sleep_mode(SLEEP_MODE_PWR_DOWN);
 	cli();
 	sleep_enable();
-#if defined __AVR_ATmega328P__
-	sleep_bod_disable();
-#endif
+    #if defined __AVR_ATmega328P__
+        sleep_bod_disable();
+    #endif
+	// Enable interrupts & sleep until WDT or ext. interrupt
 	sei();
-	// sleep until WDT or ext. interrupt
+    // Directly sleep CPU, to prevent race conditions! (see chapter 7.7 of ATMega328P datasheet)
 	sleep_cpu();
     sleep_disable();	
 	// restore previous WDT settings
@@ -77,38 +96,39 @@ void hwPowerDown(period_t period) {
 
 void hwInternalSleep(unsigned long ms) {
 	// Let serial prints finish (debug, log etc)
-  #ifndef MY_DISABLED_SERIAL
-	  Serial.flush();
-  #endif
-	// reset interrupt trigger var
-	pinIntTrigger = 0;
-	while (!pinIntTrigger && ms >= 8000) { hwPowerDown(SLEEP_8S); ms -= 8000; }
-	if (!pinIntTrigger && ms >= 4000)    { hwPowerDown(SLEEP_4S); ms -= 4000; }
-	if (!pinIntTrigger && ms >= 2000)    { hwPowerDown(SLEEP_2S); ms -= 2000; }
-	if (!pinIntTrigger && ms >= 1000)    { hwPowerDown(SLEEP_1S); ms -= 1000; }
-	if (!pinIntTrigger && ms >= 500)     { hwPowerDown(SLEEP_500MS); ms -= 500; }
-	if (!pinIntTrigger && ms >= 250)     { hwPowerDown(SLEEP_250MS); ms -= 250; }
-	if (!pinIntTrigger && ms >= 125)     { hwPowerDown(SLEEP_120MS); ms -= 120; }
-	if (!pinIntTrigger && ms >= 64)      { hwPowerDown(SLEEP_60MS); ms -= 60; }
-	if (!pinIntTrigger && ms >= 32)      { hwPowerDown(SLEEP_30MS); ms -= 30; }
-	if (!pinIntTrigger && ms >= 16)      { hwPowerDown(SLEEP_15MS); ms -= 15; }
+    #ifndef MY_DISABLED_SERIAL
+        MY_SERIALDEVICE.flush();
+    #endif
+	while (!interruptWakeUp() && ms >= 8000) { hwPowerDown(SLEEP_8S); ms -= 8000; }
+	if (!interruptWakeUp() && ms >= 4000)    { hwPowerDown(SLEEP_4S); ms -= 4000; }
+	if (!interruptWakeUp() && ms >= 2000)    { hwPowerDown(SLEEP_2S); ms -= 2000; }
+	if (!interruptWakeUp() && ms >= 1000)    { hwPowerDown(SLEEP_1S); ms -= 1000; }
+	if (!interruptWakeUp() && ms >= 500)     { hwPowerDown(SLEEP_500MS); ms -= 500; }
+	if (!interruptWakeUp() && ms >= 250)     { hwPowerDown(SLEEP_250MS); ms -= 250; }
+	if (!interruptWakeUp() && ms >= 125)     { hwPowerDown(SLEEP_120MS); ms -= 120; }
+	if (!interruptWakeUp() && ms >= 64)      { hwPowerDown(SLEEP_60MS); ms -= 60; }
+	if (!interruptWakeUp() && ms >= 32)      { hwPowerDown(SLEEP_30MS); ms -= 30; }
+	if (!interruptWakeUp() && ms >= 16)      { hwPowerDown(SLEEP_15MS); ms -= 15; }
 }
 
 int8_t hwSleep(unsigned long ms) {
 	hwInternalSleep(ms);
-	return -1;
+	return MY_WAKE_UP_BY_TIMER;
 }
 
 int8_t hwSleep(uint8_t interrupt, uint8_t mode, unsigned long ms) {
-	return hwSleep(interrupt,mode,0xFF,0x00,ms);
+	return hwSleep(interrupt,mode,INVALID_INTERRUPT_NUM,0u,ms);
 }
 
 int8_t hwSleep(uint8_t interrupt1, uint8_t mode1, uint8_t interrupt2, uint8_t mode2, unsigned long ms) {
-	// reset interrupt trigger var
-	pinIntTrigger = 0;
+    // Disable interrupts until going to sleep, otherwise interrupts occurring between attachInterrupt()
+    // and sleep might cause the ATMega to not wakeup from sleep as interrupt has already be handled!
+	cli();
 	// attach interrupts 
-	attachInterrupt(interrupt1, wakeUp, mode1);
-	if (interrupt2!=0xFF) attachInterrupt(interrupt2, wakeUp2, mode2);
+    _wakeUp1Interrupt  = interrupt1;
+    _wakeUp2Interrupt  = interrupt2;
+    if (interrupt1 != INVALID_INTERRUPT_NUM) attachInterrupt(interrupt1, wakeUp1, mode1);
+	if (interrupt2 != INVALID_INTERRUPT_NUM) attachInterrupt(interrupt2, wakeUp2, mode2);
 	
 	if (ms>0) {
 		// sleep for defined time
@@ -117,19 +137,19 @@ int8_t hwSleep(uint8_t interrupt1, uint8_t mode1, uint8_t interrupt2, uint8_t mo
 		// sleep until ext interrupt triggered
     	hwPowerDown(SLEEP_FOREVER);
 	}
-	
-	detachInterrupt(interrupt1);
-	if (interrupt2!=0xFF) detachInterrupt(interrupt2);
-	
-	// default: no interrupt triggered, timer wake up	
-	int8_t retVal = -1;
+    
+    // Assure any interrupts attached, will get detached when they did not occur.
+    if (interrupt1 != INVALID_INTERRUPT_NUM) detachInterrupt(interrupt1);
+	if (interrupt2 != INVALID_INTERRUPT_NUM) detachInterrupt(interrupt2);
 
-	if (pinIntTrigger == 1) {
-		retVal = (int8_t)interrupt1;
-	} else if (pinIntTrigger == 2) {
-		retVal = (int8_t)interrupt2;
-	}
-	return retVal;
+    // Return what woke the mcu.
+    int8_t ret = MY_WAKE_UP_BY_TIMER;       // default: no interrupt triggered, timer wake up	
+    if (interruptWakeUp()) ret = static_cast<int8_t>(_wokeUpByInterrupt);
+
+    // Clear woke-up-by-interrupt flag, so next sleeps won't return immediately.
+    _wokeUpByInterrupt = INVALID_INTERRUPT_NUM;
+
+	return ret;
 }
 
 uint16_t hwCPUVoltage() {
@@ -152,8 +172,8 @@ uint16_t hwCPUVoltage() {
 	return (1125300UL) / ADC;
 }
 
-uint8_t hwCPUFrequency() {
-	noInterrupts();
+uint16_t hwCPUFrequency() {
+	cli();
 	// setup timer1
 	TIFR1 = 0xFF;   
 	TCNT1 = 0; 
@@ -175,37 +195,46 @@ uint8_t hwCPUFrequency() {
 	wdt_reset();
 	WDTCSR |= (1 << WDCE) | (1 << WDE);
 	WDTCSR = WDTsave;
-	interrupts();	
+	sei();	
 	// return frequency in 1/10MHz (accuracy +- 10%)
 	return TCNT1 * 2048UL / 100000UL;
+}
+
+uint16_t hwFreeMem() {
+	extern int __heap_start, *__brkval; 
+	int v; 
+	return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval); 
 }
 
 
 
 #ifdef MY_DEBUG
 void hwDebugPrint(const char *fmt, ... ) {
-	char fmtBuffer[300];
+	char fmtBuffer[MY_DEBUG_BUFFER_SIZE];
 	#ifdef MY_GATEWAY_FEATURE
 		// prepend debug message to be handled correctly by controller (C_INTERNAL, I_LOG_MESSAGE)
-		snprintf_P(fmtBuffer, 299, PSTR("0;255;%d;0;%d;"), C_INTERNAL, I_LOG_MESSAGE);
-		Serial.print(fmtBuffer);
+		snprintf_P(fmtBuffer, sizeof(fmtBuffer), PSTR("0;255;%d;0;%d;"), C_INTERNAL, I_LOG_MESSAGE);
+		MY_SERIALDEVICE.print(fmtBuffer);
+	#else
+		// prepend timestamp (AVR nodes)
+		MY_SERIALDEVICE.print(hwMillis());
+		MY_SERIALDEVICE.print(" ");
 	#endif
 	va_list args;
 	va_start (args, fmt );
-	va_end (args);
 	#ifdef MY_GATEWAY_FEATURE
 		// Truncate message if this is gateway node
 		vsnprintf_P(fmtBuffer, MY_GATEWAY_MAX_SEND_LENGTH, fmt, args);
 		fmtBuffer[MY_GATEWAY_MAX_SEND_LENGTH-1] = '\n';
 		fmtBuffer[MY_GATEWAY_MAX_SEND_LENGTH] = '\0';
 	#else
-		vsnprintf_P(fmtBuffer, 299, fmt, args);
+		vsnprintf_P(fmtBuffer, sizeof(fmtBuffer), fmt, args);
 	#endif
 	va_end (args);
-	Serial.print(fmtBuffer);
-	Serial.flush();
+	MY_SERIALDEVICE.print(fmtBuffer);
+	MY_SERIALDEVICE.flush();
 
-	//Serial.write(freeRam());
+	//MY_SERIALDEVICE.write(freeRam());
 }
 #endif
 

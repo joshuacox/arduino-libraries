@@ -68,7 +68,7 @@ void hwReadConfigBlock(void* buf, void* adr, size_t length)
   int offs = reinterpret_cast<int>(adr);
   while (length-- > 0)
   {
-    *dst++ = i2c_eeprom_read_byte(offs++); 
+    *dst++ = i2c_eeprom_read_byte(offs++);
   }
 }
 
@@ -100,7 +100,7 @@ void hwWriteConfig(int adr, uint8_t value)
 
 void hwInit() {
   MY_SERIALDEVICE.begin(MY_BAUD_RATE);
-  #ifndef MY_GATEWAY_W5100
+  #if defined(MY_GATEWAY_SERIAL)
   while (!MY_SERIALDEVICE) {}
   #endif
   Wire.begin();
@@ -117,7 +117,7 @@ void hwReboot() {
 int8_t hwSleep(unsigned long ms) {
   // TODO: Not supported!
   (void)ms;
-  return -2;
+  return MY_SLEEP_NOT_POSSIBLE;
 }
 
 int8_t hwSleep(uint8_t interrupt, uint8_t mode, unsigned long ms) {
@@ -125,7 +125,7 @@ int8_t hwSleep(uint8_t interrupt, uint8_t mode, unsigned long ms) {
   (void)interrupt;
   (void)mode;
   (void)ms;
-  return -2;
+  return MY_SLEEP_NOT_POSSIBLE;
 }
 
 int8_t hwSleep(uint8_t interrupt1, uint8_t mode1, uint8_t interrupt2, uint8_t mode2, unsigned long ms) {
@@ -135,34 +135,48 @@ int8_t hwSleep(uint8_t interrupt1, uint8_t mode1, uint8_t interrupt2, uint8_t mo
   (void)interrupt2;
   (void)mode2;
   (void)ms;
-  return -2;
+  return MY_SLEEP_NOT_POSSIBLE;
+}
+
+uint16_t hwCPUVoltage() {
+	// TODO: Not supported!
+	return 0;
+}
+
+uint16_t hwCPUFrequency() {
+	// TODO: Not supported!
+	return 0;
+}
+
+uint16_t hwFreeMem() {
+	// TODO: Not supported!
+	return 0;
 }
 
 #ifdef MY_DEBUG
 void hwDebugPrint(const char *fmt, ... ) {
   if (MY_SERIALDEVICE) {
-	char fmtBuffer[300];
+	char fmtBuffer[MY_DEBUG_BUFFER_SIZE];
 	#ifdef MY_GATEWAY_FEATURE
 		// prepend debug message to be handled correctly by controller (C_INTERNAL, I_LOG_MESSAGE)
-		snprintf(fmtBuffer, 299, PSTR("0;255;%d;0;%d;"), C_INTERNAL, I_LOG_MESSAGE);
+		snprintf(fmtBuffer, sizeof(fmtBuffer), PSTR("0;255;%d;0;%d;"), C_INTERNAL, I_LOG_MESSAGE);
 		MY_SERIALDEVICE.print(fmtBuffer);
 	#endif
 	va_list args;
 	va_start (args, fmt );
-	va_end (args);
 	#ifdef MY_GATEWAY_FEATURE
 		// Truncate message if this is gateway node
 		vsnprintf(fmtBuffer, 60, fmt, args);
 		fmtBuffer[59] = '\n';
 		fmtBuffer[60] = '\0';
 	#else
-		vsnprintf(fmtBuffer, 299, fmt, args);
+		vsnprintf(fmtBuffer, sizeof(fmtBuffer), fmt, args);
 	#endif
 	va_end (args);
 	MY_SERIALDEVICE.print(fmtBuffer);
 //	MY_SERIALDEVICE.flush();
 
-	//Serial.write(freeRam());
+	//MY_SERIALDEVICE.write(freeRam());
     }
 }
 #endif

@@ -33,8 +33,7 @@
 #define MY_RADIO_NRF24
 //#define MY_RADIO_RFM69
 
-#include <SPI.h>
-#include <MySensor.h>  
+#include <MySensors.h>  
 
 #define CHILD_ID_LIGHT 0
 #define LIGHT_SENSOR_ANALOG_PIN 0
@@ -55,7 +54,7 @@ void presentation()  {
 
 void loop()      
 {     
-  int lightLevel = (1023-analogRead(LIGHT_SENSOR_ANALOG_PIN))/10.23; 
+  int16_t lightLevel = (1023-analogRead(LIGHT_SENSOR_ANALOG_PIN))/10.23; 
   Serial.println(lightLevel);
   if (lightLevel != lastLightLevel) {
       send(msg.set(lightLevel));

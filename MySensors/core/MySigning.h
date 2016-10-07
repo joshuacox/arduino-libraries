@@ -146,10 +146,10 @@
  * @code{.cpp}
  * //#define MY_SIGNING_SOFT
  * #define MY_SIGNING_ATSHA204
- * #include <MySensor.h>
+ * #include <MySensors.h>
  * ...
  * @endcode
- * Make sure to set the define before the inclusion of MySensor.h.
+ * Make sure to set the define before the inclusion of MySensors.h.
  * It is legal to mix hardware- and software-based backends in a network. They work together.
  *
  * You also need to decide if the node (or gateway) in question require and verify signatures in addition to calculating them.
@@ -157,6 +157,8 @@
  * Just set the flag @ref MY_SIGNING_REQUEST_SIGNATURES and the node will inform the gateway that it expects the gateway to sign all
  * messages sent to the node. If this is set in a gateway, it will @b NOT force all nodes to sign messages to it. It will only require
  * signatures from nodes that in turn require signatures.<br>
+ * If you want to have two nodes communicate securely directly with each other, the nodes that require signatures must send a presentation
+ * message to all nodes it expect signed messages from (only the gateway is informed automatically). See @ref signerPresentation().<br>
  * A node can have three "states" with respect to signing:
  * 1. Node does not support signing in any way (neither @ref MY_SIGNING_ATSHA204 nor @ref MY_SIGNING_SOFT is set)
  * 2. Node does support signing but don't require messages sent to it to be signed (@ref MY_SIGNING_REQUEST_SIGNATURES is not set)
@@ -170,7 +172,7 @@
  * #define MY_SIGNING_ATSHA204
  * #define MY_SIGNING_ATSHA204_PIN 4
  * #define MY_SIGNING_REQUEST_SIGNATURES
- * #include <MySensor.h>
+ * #include <MySensors.h>
  * ...
  * @endcode
  * For the software backed signingbackend, an unconnected analog pin is required to set a random seed for the pseudo-random generator.
@@ -178,18 +180,18 @@
  * signatures. The setting is defined using @ref MY_SIGNING_SOFT_RANDOMSEED_PIN and the default is to use pin A7. The same configuration
  * possibilities exist as with the other configuration options.
  *
- * <b>Thirdly</b>, if you use the software backend, you need to personalize the node (see @ref perzonalization).
+ * <b>Thirdly</b>, if you use the software backend, you need to personalize the node (see @ref personalization).
  * @code{.cpp}
  * #define MY_SIGNING_SOFT
  * #define MY_SIGNING_SOFT_RANDOMSEED_PIN 7
  * #define MY_SIGNING_REQUEST_SIGNATURES
- * #include <MySensor.h>
+ * #include <MySensors.h>
  * ...
  * @endcode
  *
  * An example of a node that require signatures is available in @ref SecureActuator.ino.
  *
- * @anchor perzonalization If you use the “real” ATSHA204A, before any signing operations can be done, the device needs to be <i>personalized</i>.
+ * @anchor personalization If you use the “real” ATSHA204A, before any signing operations can be done, the device needs to be <i>personalized</i>.
  * This can be a daunting process as it involves irreversibly writing configurations to the device, which cannot be undone. I have however tried
  * to simplify the process as much as possibly by creating a helper-sketch specifically for this purpose in @ref SecurityPersonalizer.ino
  * Note that you also need to do personalization for software signing, but then the values are stored in EEPROM (described below).
@@ -324,7 +326,7 @@
  * #define MY_SIGNING_ATSHA204
  * #define MY_SIGNING_REQUEST_SIGNATURES
  * #define MY_SIGNING_NODE_WHITELISTING {{.nodeId = GATEWAY_ADDRESS,.serial = {0x09,0x08,0x07,0x06,0x05,0x04,0x03,0x02,0x01}},{.nodeId = 2,.serial = {0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09}}}
- * #include <MySensor.h>
+ * #include <MySensors.h>
  * ...
  * @endcode
  * In this example, there are two nodes in the whitelist; the gateway, and a separate node that communicates directly with this node (with signed
@@ -336,7 +338,7 @@
  * #define MY_SIGNING_SOFT_RANDOMSEED_PIN 7
  * #define MY_SIGNING_REQUEST_SIGNATURES
  * #define MY_SIGNING_NODE_WHITELISTING {{.nodeId = GATEWAY_ADDRESS,.serial = {0x09,0x08,0x07,0x06,0x05,0x04,0x03,0x02,0x01}},{.nodeId = 2,.serial = {0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09}}}
- * #include <MySensor.h>
+ * #include <MySensors.h>
  * ...
  * @endcode
  *
@@ -403,7 +405,7 @@
  * @code{.cpp}
  * #define MY_SIGNING_ATSHA204
  * #define MY_SIGNING_REQUEST_SIGNATURES
- * #include <MySensor.h>
+ * #include <MySensors.h>
  * ...
  * @endcode
  * If you do also want your gateway to require signatures from your lock you just enable the same (or similar if using software signing) settings
@@ -423,7 +425,7 @@
  * #define MY_SIGNING_SOFT
  * #define MY_SIGNING_SOFT_RANDOMSEED_PIN 7
  * #define MY_SIGNING_REQUEST_SIGNATURES
- * #include <MySensor.h>
+ * #include <MySensors.h>
  * ...
  * @endcode
  *
@@ -433,7 +435,7 @@
  * #define MY_SIGNING_SOFT_RANDOMSEED_PIN 7
  * #define MY_SIGNING_REQUEST_SIGNATURES
  * #define MY_SIGNING_NODE_WHITELISTING {{.nodeId = MOTION_SENSOR_ID,.serial = {0x12,0x34,0x56,0x78,0x90,0x12,0x34,0x56,0x78}}}
- * #include <MySensor.h>
+ * #include <MySensors.h>
  * ...
  * @endcode
 
@@ -445,7 +447,7 @@
  * Configuration example for the keyfob (keyfob will only transmit to another node and not receive anything):<br>
  * @code{.cpp}
  * #define MY_SIGNING_ATSHA204
- * #include <MySensor.h>
+ * #include <MySensors.h>
  * ...
  * @endcode
  *
@@ -455,7 +457,7 @@
  * #define MY_SIGNING_SOFT_RANDOMSEED_PIN 7
  * #define MY_SIGNING_REQUEST_SIGNATURES
  * #define MY_SIGNING_NODE_WHITELISTING {{.nodeId = GATEWAY_ADDRESS,.serial = {0x00,0x11,0x22,0x33,0x44,0x55,0x66,0x77,0x88}},{.nodeId = KEYFOB_ID,.serial = {<FROM ATSHA ON KEYFOB>}}}
- * #include <MySensor.h>
+ * #include <MySensors.h>
  * ...
  * @endcode
  *
@@ -473,7 +475,7 @@
 #ifndef MySigning_h
 #define MySigning_h
 
-#include "MySensorCore.h"
+#include "MySensorsCore.h"
 #include "drivers/ATSHA204/ATSHA204.h"
 
 #ifdef MY_SIGNING_NODE_WHITELISTING
@@ -506,14 +508,19 @@ void signerInit(void);
 /**
  * @brief Does signing specific presentation for a node.
  *
- * This function makes sure any signing related presentation info is shared with the gateway.
+ * This function makes sure any signing related presentation info is shared with the other part.
  * The presentation of the gateways signing preferences is done in @ref signerProcessInternal().
  * \n@b Usage: This function should be called by the presentation routine of the mysensors library.
- * There is no need to call this directly from a sketch.
+ * You only need to call this directly from a sketch to set up a node to node signed message exchange.
+ * If you do call this directly from a sketch, and you at some point change your sketch to go from
+ * requireing signing to not requireing signatures, you need to present this change to the node at least
+ * once, so it can update its requirements tables accordingly. Or it will keep believing that this node
+ * require signatures and attempt to send signed messages to it.
  *
  * @param msg Message buffer to use.
+ * @param destination Node ID of the destination.
  */
-void signerPresentation(MyMessage &msg);
+void signerPresentation(MyMessage &msg, uint8_t destination);
  
 /**
  * @brief Manages internal signing message handshaking.
@@ -615,5 +622,94 @@ void signerSha256Update(const uint8_t* data, size_t sz);
  */
 uint8_t* signerSha256Final(void);
 
+/**
+ * @brief Do a timing neutral memory comparison.
+ *
+ * The function behaves similar to memcmp with the difference that it will
+ * always use the same number of instructions for a given number of bytes,
+ * no matter how the two buffers differ and the response is either 0 or -1.
+ *
+ * @param a First buffer for comparison.
+ * @param b Second buffer for comparison.
+ * @param sz The number of bytes to compare.
+ * @returns 0 if buffers match, -1 if they do not.
+ */
+int signerMemcmp(const void* a, const void* b, size_t sz);
+
 #endif
+/** @}*/
+/**
+ * @defgroup MySigningTroubleshootinggrp Troubleshooting
+ * @ingroup MySigninggrp
+ * @{
+ *
+ * @section MySigningTroubleshootingSymptoms Symptoms and solutions
+ *
+ * The first thing to do if you suspect signing is causing problems, is to enable the verbose debug
+ * flag for the signing backend. @see MY_DEBUG_VERBOSE_SIGNING
+ *
+ * If you are having trouble getting signing to work, please see the following troubleshooting tips.
+ *
+ * @subsection MySigningTroubleshootingSymptomStFail Signing fails and logs show st=fail on transmissions
+ *
+ * This is actually not a signing problem, although ofthen st=fail becomes st=ok when signing is disabled.
+ * This is by far the most commonly reported problem with signing, but the problems is not with signing,
+ * it is with radio performence.<br>
+ * This is a typical log which might look like a signing related issue but isn't:
+ * @code{.unparsed}
+ * 0;255;3;0;9;Skipping security for command 3 type 16
+ * 0;255;3;0;9;read: 3-3-0 s=255,c=3,t=16,pt=0,l=0,sg=0:
+ * 0;255;3;0;9;Signing backend: ATSHA204Soft
+ * 0;255;3;0;9;SHA256: 86DEAE1DAF50D577A4E2262B33ABF9DEE05DD8FAF84F94F50900000000000000
+ * 0;255;3;0;9;Skipping security for command 3 type 17
+ * 0;255;3;0;9;send: 0-0-3-3 s=255,c=3,t=17,pt=6,l=25,sg=0,st=fail:86DEAE1DAF50D577A4E2262B33ABF9DEE05DD8FAF84F94F509
+ * 0;255;3;0;9;Failed to transmit nonce!
+ * 0;255;3;0;9;Message is not signed, but it should have been!
+ * 0;255;3;0;9;verify fail
+ * @endcode
+ *
+ * The reason for this is that when signing is used, the messages transmitted become relatively large.<br>
+ * Because of this, the message is more sensitive to noise, and the chance for a message to get scrambled
+ * increase with the message size. Please refer to the troubleshooting section at the MySensors forum for
+ * information on how to improve radio performence.<br>
+ * This is a good place to start: https://forum.mysensors.org/topic/666/debug-faq-and-how-ask-for-help
+ *
+ * @subsection MySigningTroubleshootingSymptomNonce Failed to generate nonce
+ *
+ * The signing backend failed to generate the nonce needed to sign a message. This indicate a hardware
+ * problem. Please post the debug info on the forum together with a description of your hardware setup.
+ *
+ * @subsection MySigningTroubleshootingSymptomSign Failed to sign message
+ *
+ * The signing backend failed to sign the message. Typically this happens if your message is so large,
+ * that there is no room left in the buffer to store a signature.
+ *
+ * @subsection MySigningTroubleshootingSymptomWrongSource Nonce did not come from the destination (XX) of the message to be signed! It came from YY
+ *
+ * This should not really happen. The reason for this message is that the signing backend is only capable
+ * of handling one signed message session at any time. If for some reason multiple nodes send a nonce message to
+ * the same node, only the nonce from a node that is the destination of the current message signing session will be
+ * accepted. Any other nonces will be dropped. This should not happen as no node should send a nonce unless asked to,
+ * and a node will only ask for a nonce to one destination for every signing session.<br>
+ * If you see this message, please post the debugging details on the MySensors forum so it can be investigated further
+ * together with a description of your setup.
+ *
+ * @subsection MySigningTroubleshootingSymptomNotSigned Message is not signed, but it should have been
+ *
+ * A node has failed to comply with the signing preferences of this node. Check that the node has received a
+ * signing presentation message from this node. This is automatically transmitted to gateways. For other nodes,
+ * you need to transmit the presentation from the sketch. @see signerPresentation
+ *
+ * @subsection MySigningTroubleshootingSymptomNotSignedGeneral "Messages do not appear to be signed but I think they should be..."
+ *
+ * Make sure you have enabled the flag to require signatures to require signatures and have enabled one of the signing
+ * backends. @see MY_SIGNING_REQUEST_SIGNATURES @see MY_SIGNING_ATSHA204 @see MY_SIGNING_SOFT
+ *
+ * @subsection MySigningTroubleshootingSymptomNotWorkingWhitelisting Signature verification failed!
+ *
+ * Make sure both source and destination of the signed message has undergone @ref personalization with the same HMAC key.<br>
+ * Also, if whitelisting is used, make sure the proper serial is paired with the proper node ID at the destination.
+ * Whitelisting preferences are communicated with the signing presentation (done automatically from nodes to gateway but
+ * has to be explicitly done by sketch for node to node communication). @see signerPresentation
+ */
 /** @}*/

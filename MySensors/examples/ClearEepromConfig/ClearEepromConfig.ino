@@ -26,8 +26,7 @@
 // load core modules only
 #define MY_CORE_ONLY
 
-#include <EEPROM.h>
-#include <MySensor.h>  
+#include <MySensors.h>  
 
 void setup()  
 { 

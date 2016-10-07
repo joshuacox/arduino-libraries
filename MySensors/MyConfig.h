@@ -2,7 +2,7 @@
  * The MySensors Arduino library handles the wireless radio link and protocol
  * between your home built sensors/actuators and HA controller of choice.
  * The sensors forms a self healing radio network with optional repeaters. Each
- * repeater and gateway builds a routing tables in EEPROM which keeps track of the
+ * repeater and gateway builds a routing tables in RAM or EEPROM which keeps track of the
  * network topology allowing messages to be routed to nodes.
  *
  * Created by Henrik Ekblad <henrik.ekblad@mysensors.org>
@@ -31,14 +31,18 @@
 *  Serial and debug options
 ***********************************/
 
-// Enables this in sketch to show debug prints. This option will add a lot to the size of the
+// Enable MY_DEBUG in sketch to show debug prints. This option will add a lot to the size of the
 // final sketch but is helpful to see what is actually is happening during development
 //#define MY_DEBUG
 
-// Enable MY_DEBUG_VERBOSE flag for verbose debug prints related to RF24 radio.
-// Requires DEBUG to be enabled.
-// This will add even more to the size of the final sketch!
-//#define MY_DEBUG_VERBOSE
+// Enable MY_SPECIAL_DEBUG in sketch to activate I_DEBUG messages if MY_DEBUG is disabled.
+// I_DEBUG requests are:
+// R: routing info (only repeaters): received msg XXYY (as stream), where XX is the node and YY the routing node
+// V: CPU voltage
+// F: CPU frequency
+// M: free memory
+// E: clear MySensors EEPROM area and reboot (i.e. "factory" reset)
+//#define MY_SPECIAL_DEBUG
 
 // Enable MY_DEBUG_VERBOSE_SIGNING flag for verbose debug prints related to signing.
 // Requires DEBUG to be enabled.
@@ -78,6 +82,93 @@
 //#define MY_RS485
 
 /**
+* @def MY_RAM_ROUTING_TABLE_FEATURE
+* @brief If enabled, the routing table is kept in RAM (if memory allows) and saved in regular intervals.
+* note: AVR has limited memory, use with care
+*/
+#define MY_RAM_ROUTING_TABLE_FEATURE
+
+/**
+* @def MY_ROUTING_TABLE_SAVE_INTERVAL_MS
+* @brief Interval to dump content of routing table to eeprom
+*/
+#ifndef MY_ROUTING_TABLE_SAVE_INTERVAL_MS
+#define MY_ROUTING_TABLE_SAVE_INTERVAL_MS	(10*60*1000ul)
+#endif
+/**
+* @def MY_TRANSPORT_SANITY_CHECK
+* @brief If enabled, node will check transport in regular intervals to detect HW issues and re-initialize in case of failure. 
+* This feature is enabled for all repeater nodes (incl. GW)
+*/
+//#define MY_TRANSPORT_SANITY_CHECK
+
+/**
+* @def MY_TRANSPORT_SANITY_CHECK_INTERVAL_MS
+* @brief Interval (in ms) of transport sanity checks
+*/
+#ifndef MY_TRANSPORT_SANITY_CHECK_INTERVAL_MS
+#define MY_TRANSPORT_SANITY_CHECK_INTERVAL_MS (60*1000ul)
+#endif
+/**
+* @def MY_TRANSPORT_DISCOVERY_INTERVAL_MS
+* @brief This is a gateway-only feature: Interval (in ms) to issue network discovery checks 
+*/
+#ifndef MY_TRANSPORT_DISCOVERY_INTERVAL_MS
+#define MY_TRANSPORT_DISCOVERY_INTERVAL_MS (10*60*1000ul)
+#endif
+
+/**
+ *@def MY_TRANSPORT_UPLINK_CHECK_DISABLED
+ *@brief If set, uplink check to GW is disabled during transport initialisation
+ */
+//#define MY_TRANSPORT_UPLINK_CHECK_DISABLED
+
+/**
+*@def MY_TRANSPORT_DONT_CARE_MODE
+*@brief If set, transport traffic is unmonitored and GW connection is optional
+*/
+//#define MY_TRANSPORT_DONT_CARE_MODE
+
+/**
+ *@def MY_TRANSPORT_MAX_TX_FAILURES
+ *@brief Set to override max. consecutive TX failures until SNP is initiated
+ */
+//#define MY_TRANSPORT_MAX_TX_FAILURES (10u)
+
+/**
+ * @def MY_REGISTRATION_FEATURE
+ * @brief If enabled, node has to register to gateway/controller before allowed to send sensor data.
+ */
+#define MY_REGISTRATION_FEATURE
+
+ /**
+ * @def MY_REGISTRATION_RETRIES
+ * @brief Number of registration retries if no reply received from GW/controller
+ */
+
+#ifndef MY_REGISTRATION_RETRIES
+#define MY_REGISTRATION_RETRIES (3u)
+#endif
+
+ /**
+ * @def MY_REGISTRATION_DEFAULT
+ * @brief Node registration default - this applies if no registration response is received from controller
+ */
+#define MY_REGISTRATION_DEFAULT true
+
+ /**
+ * @def MY_REGISTRATION_CONTROLLER
+ * @brief If enabled, node registration request has to be handled by controller
+ */
+ // #define MY_REGISTRATION_CONTROLLER
+
+ /**
+ * @def MY_CORE_COMPATIBILITY_CHECK
+ * @brief If enabled, library compatibility is checked during node registration. Incompatible libraries are unable to send sensor data.
+ */
+#define MY_CORE_COMPATIBILITY_CHECK
+
+/**
  * @def MY_NODE_ID
  * @brief Node id defaults to AUTO (tries to fetch id from controller).
  */
@@ -93,18 +184,35 @@
 #define MY_PARENT_NODE_ID AUTO
 #endif
 
-// Enables repeater functionality (relays messages from other nodes)
-// #define MY_REPEATER_FEATURE
+/**
+ * @def MY_PARENT_NODE_IS_STATIC
+ * @brief Enable MY_PARENT_NODE_IS_STATIC to disable fall back if parent node fails
+ */
+//#define MY_PARENT_NODE_IS_STATIC
 
 /**
- * @def MY_SMART_SLEEP_WAIT_DURATION
- * @brief The wait period before going to sleep when using smartSleep-functions.
+* @def MY_REPEATER_FEATURE
+* @brief Enables repeater functionality (relays messages from other nodes)
+*/
+//#define MY_REPEATER_FEATURE
+
+/**
+* @def MY_SLEEP_TRANSPORT_RECONNECT_TIMEOUT_MS
+* @brief Timeout (in ms) to re-establish link if node is send to sleep and transport is not ready.
+*/
+#ifndef MY_SLEEP_TRANSPORT_RECONNECT_TIMEOUT_MS
+#define MY_SLEEP_TRANSPORT_RECONNECT_TIMEOUT_MS (10*1000ul)
+#endif
+
+/**
+ * @def MY_SMART_SLEEP_WAIT_DURATION_MS
+ * @brief The wait period (in ms) before going to sleep when using smartSleep-functions.
  *
  * This period has to be long enough for controller to be able to send out
  * potential buffered messages.
  */
-#ifndef MY_SMART_SLEEP_WAIT_DURATION
-#define MY_SMART_SLEEP_WAIT_DURATION 500
+#ifndef MY_SMART_SLEEP_WAIT_DURATION_MS
+#define MY_SMART_SLEEP_WAIT_DURATION_MS (500ul)
 #endif
 
 /**********************************
@@ -143,7 +251,7 @@
  * @brief Max buffersize needed for messages coming from controller.
  */
 #ifndef MY_GATEWAY_MAX_RECEIVE_LENGTH
-#define MY_GATEWAY_MAX_RECEIVE_LENGTH 100
+#define MY_GATEWAY_MAX_RECEIVE_LENGTH (100u)
 #endif
 
 /**
@@ -151,7 +259,7 @@
  * @brief Max buffer size when sending messages.
  */
 #ifndef MY_GATEWAY_MAX_SEND_LENGTH
-#define MY_GATEWAY_MAX_SEND_LENGTH 120
+#define MY_GATEWAY_MAX_SEND_LENGTH (120u)
 #endif
 
 /**
@@ -159,7 +267,7 @@
  * @brief Max number of parallel clients (sever mode).
  */
 #ifndef MY_GATEWAY_MAX_CLIENTS
-#define MY_GATEWAY_MAX_CLIENTS 1
+#define MY_GATEWAY_MAX_CLIENTS (1u)
 #endif
 
 
@@ -167,25 +275,22 @@
 /**********************************
 *  Information LEDs blinking
 ***********************************/
-// This feature enables LEDs blinking on message receive, transmit
-// or if some error occurred. This was commonly used only in gateways,
-// but now can be used in any sensor node. Also the LEDs can now be
-// disabled in the gateway.
+// If one of the following is defined here, or in the sketch, the pin will be used for the
+// corresponding led function.
+// They have to be enabled here (or in your sketch). Replace x with the pin number you have the LED on.
+//
+// NOTE!! that on some platforms (for example sensebender GW) the hardware variant can enable LEDs by default,
+// These defaults can be overridden by defining one of these.
+//#define MY_DEFAULT_ERR_LED_PIN x
+//#define MY_DEFAULT_TX_LED_PIN x
+//#define MY_DEFAULT_RX_LED_PIN x
 
-//#define MY_LEDS_BLINKING_FEATURE
-
-// The following setting allows you to inverse the blinking feature MY_LEDS_BLINKING_FEATURE
+// The following setting allows you to inverse the LED blinking
 // When MY_WITH_LEDS_BLINKING_INVERSE is enabled LEDSs are normally turned on and switches
 // off when blinking
 
 //#define MY_WITH_LEDS_BLINKING_INVERSE
 
-// The following defines can be used to set the port pin, that the LED is connected to
-// If one of the following is defined here, or in the sketch, MY_LEDS_BLINKING_FEATURE will be
-// enabled by default. (Replace x with the pin number you have the LED on)
-//#define MY_DEFAULT_ERR_LED x
-//#define MY_DEFAULT_TX_LED x
-//#define MY_DEFAULT_RX_LED x
 
 /**********************************************
 *  Gateway inclusion button/mode configuration
@@ -327,11 +432,23 @@
 #endif
 
 /**********************************
-*  NRF24L01 Driver Defaults
+*  NRF24L01P Driver Defaults
 ***********************************/
 
 // Enables RF24 encryption (all nodes and gateway must have this enabled, and all must be personalized with the same AES key)
 //#define MY_RF24_ENABLE_ENCRYPTION
+
+/**
+ * @def MY_DEBUG_VERBOSE_RF24
+ * @brief Enable MY_DEBUG_VERBOSE_RF24 flag for verbose debug prints related to the RF24 driver. Requires DEBUG to be enabled.
+ */
+//#define MY_DEBUG_VERBOSE_RF24
+
+/**
+ * @def MY_RF24_SPI_MAX_SPEED
+ * @brief MY_RF24_SPI_MAX_SPEED to overrule default nRF24L01+ SPI speed.
+ */
+//#define MY_RF24_SPI_MAX_SPEED 4000000
 
 /**
  * @def MY_RF24_CE_PIN
@@ -342,6 +459,8 @@
 		#define MY_RF24_CE_PIN 4
 	#elif defined(ARDUINO_ARCH_SAMD)
 		#define MY_RF24_CE_PIN 27
+	#elif defined(LINUX_ARCH_RASPBERRYPI)
+		#define MY_RF24_CE_PIN 22
 	#else
 		#define MY_RF24_CE_PIN 9
 	#endif
@@ -356,8 +475,28 @@
 		#define MY_RF24_CS_PIN 15
 	#elif defined(ARDUINO_ARCH_SAMD)
 		#define MY_RF24_CS_PIN 3
+	#elif defined(LINUX_ARCH_RASPBERRYPI)
+		#define MY_RF24_CS_PIN 24
 	#else
 		#define MY_RF24_CS_PIN 10
+	#endif
+#endif
+
+/**
+* @def MY_RX_MESSAGE_BUFFER_FEATURE
+* @brief This enabled the receiving buffer feature.
+*
+* This feature is currently not supported for RFM69 and RS485, for RF24 MY_RF24_IRQ_PIN has to be defined.
+*/
+//#define MY_RX_MESSAGE_BUFFER_FEATURE
+
+/**
+ * @def MY_RX_MESSAGE_BUFFER_SIZE
+ * @brief Declare the amount of incoming messages that can be buffered.
+ */
+#ifdef MY_RX_MESSAGE_BUFFER_FEATURE
+	#ifndef MY_RX_MESSAGE_BUFFER_SIZE
+		#define MY_RX_MESSAGE_BUFFER_SIZE  (20)
 	#endif
 #endif
 
@@ -399,10 +538,20 @@
  * @def MY_RF24_BASE_RADIO_ID
  * @brief RF24 radio network identifier.
  *
- * This is also act as base value for sensor nodeId addresses. Change this (or channel) if you have more than one sensor network.
+ * This acts as base value for sensor nodeId addresses. Change this (or channel) if you have more than one sensor network.
  */
 #ifndef MY_RF24_BASE_RADIO_ID
-#define MY_RF24_BASE_RADIO_ID ((uint64_t)0xA8A8E1FC00LL)
+#define MY_RF24_BASE_RADIO_ID 0x00,0xFC,0xE1,0xA8,0xA8
+#endif
+
+/**
+ * @def MY_RF24_ADDR_WIDTH
+ * @brief RF24 address width.
+ *
+ * This defines the width of the base address.
+ */
+#ifndef MY_RF24_ADDR_WIDTH
+#define MY_RF24_ADDR_WIDTH 5
 #endif
 
 // Enable SOFTSPI for NRF24L01, useful for the W5100 Ethernet module
@@ -509,13 +658,18 @@
 //#define MY_GATEWAY_W5100
 //#define MY_GATEWAY_ENC28J60
 //#define MY_GATEWAY_ESP8266
+//#define MY_GATEWAY_LINUX
 
 /**
  * @def MY_PORT
  * @brief The Ethernet TCP/UDP port to open on controller or gateway.
  */
 #ifndef MY_PORT
-#define MY_PORT 5003
+	#ifdef MY_GATEWAY_MQTT_CLIENT
+		#define MY_PORT 1883
+	#else
+		#define MY_PORT 5003
+	#endif
 #endif
 
 // Static ip address of gateway (if this is disabled, DHCP will be used)
@@ -545,6 +699,10 @@
 // Controller ip-address, if this is defined, gateway will act as a client trying to contact controller on MY_PORT.
 // If MY_CONTROLLER_IP_ADDRESS is left un-defined, gateway acts as server allowing incoming connections.
 //#define MY_CONTROLLER_IP_ADDRESS 192, 168, 178, 254
+
+/**************************************
+* Node Locking
+***************************************/
 
 /**
  * @defgroup MyLockgrp MyNodeLock
@@ -585,7 +743,7 @@
  *
  * If using a secure bootloader, grounding the pin is the only option to reactivate the node.
  * If using stock Android bootloader or a DualOptiBoot it is also possible to download a sketch
- * using serial protocol to erase EEPROM to unlock the node. 
+ * using serial protocol to erase EEPROM to unlock the node.
  */
 #ifndef MY_NODE_UNLOCK_PIN
 #define MY_NODE_UNLOCK_PIN 14
@@ -602,7 +760,67 @@
 #endif
 /** @}*/ // Node lock group
 
+/**********************************
+*  ESP8266 Defaults
+***********************************/
+
+/**
+ * @def MY_ESP8266_SERIAL_MODE
+ * @brief Serial modes: SERIAL_FULL, SERIAL_RX_ONLY, SERIAL_TX_ONLY
+ *
+ * SERIAL_FULL: Default mode.
+ * SERIAL_TX_ONLY: allows to use RX (GPIO3) as a general purpose input/output.
+ * SERIAL_RX_ONLY: allows to use TX (GPIO1) as a general purpose input/output.
+ */
+#ifndef MY_ESP8266_SERIAL_MODE
+#define MY_ESP8266_SERIAL_MODE SERIAL_FULL
 #endif
+
+/**************************************
+* Linux Settings
+***************************************/
+
+/**
+ * @def MY_LINUX_SERIAL_PORT
+ * @brief Serial device port
+ */
+#ifndef MY_LINUX_SERIAL_PORT
+#define MY_LINUX_SERIAL_PORT "/dev/ttyACM0"
+#endif
+
+/**
+ * @def MY_IS_SERIAL_PTY
+ * @brief Set serial as a pseudo terminal.
+ *
+ * Enable this if you need to connect to a controller running on the same device.
+ */
+//#define MY_IS_SERIAL_PTY
+
+/**
+ * @def MY_LINUX_SERIAL_PTY
+ * @brief Symlink name for the PTY device.
+ */
+#ifndef MY_LINUX_SERIAL_PTY
+#define MY_LINUX_SERIAL_PTY "/dev/ttyMySensorsGateway"
+#endif
+
+/**
+ * @def MY_LINUX_SERIAL_GROUPNAME
+ * @brief Grant access to the specified system group for the serial device.
+ */
+//#define MY_LINUX_SERIAL_GROUPNAME "tty"
+
+/**
+ * @def MY_LINUX_CONFIG_FILE
+ * @brief Set the filepath for the gateway config file
+ *
+ * For now the configuration file is only used to store the emulated eeprom state
+ */
+#ifndef MY_LINUX_CONFIG_FILE
+#define MY_LINUX_CONFIG_FILE "/etc/mysensors.dat"
+#endif
+
+#endif	// MyConfig_h
 
 // Doxygen specific constructs, not included when built normally
 // This is used to enable disabled macros/definitions to be included in the documentation as well.
@@ -612,4 +830,16 @@
 #define MY_SIGNING_REQUEST_SIGNATURES
 #define MY_SIGNING_NODE_WHITELISTING {{.nodeId = GATEWAY_ADDRESS,.serial = {0x09,0x08,0x07,0x06,0x05,0x04,0x03,0x02,0x01}}}
 #define MY_IS_RFM69HW
+#define MY_PARENT_NODE_IS_STATIC
+#define MY_REGISTRATION_CONTROLLER
+#define MY_DEBUG_VERBOSE_RF24
+#define MY_TRANSPORT_SANITY_CHECK
+#define MY_RF24_IRQ_PIN
+#define MY_RX_MESSAGE_BUFFER_FEATURE
+#define MY_RX_MESSAGE_BUFFER_SIZE
+#define MY_NODE_LOCK_FEATURE
+#define MY_REPEATER_FEATURE
+#define MY_TRANSPORT_DONT_CARE_MODE
+#define MY_LINUX_SERIAL_GROUPNAME
+#define MY_IS_SERIAL_PTY
 #endif

@@ -84,10 +84,12 @@ static bool skipSign(MyMessage &msg) {
 		SIGN_DEBUG(PSTR("Skipping security for ACK on command %d type %d\n"), mGetCommand(msg), msg.type);
 		return true;
 	}	else if (mGetCommand(msg) == C_INTERNAL &&
-		(msg.type == I_NONCE_REQUEST || msg.type == I_NONCE_RESPONSE       || msg.type == I_SIGNING_PRESENTATION ||
-	   msg.type == I_ID_REQUEST    || msg.type == I_ID_RESPONSE          ||
-	   msg.type == I_FIND_PARENT   || msg.type == I_FIND_PARENT_RESPONSE ||
-	   msg.type == I_HEARTBEAT     || msg.type == I_HEARTBEAT_RESPONSE)) {
+		(msg.type == I_NONCE_REQUEST		|| msg.type == I_NONCE_RESPONSE			|| msg.type == I_SIGNING_PRESENTATION ||
+		msg.type == I_ID_REQUEST			|| msg.type == I_ID_RESPONSE			||
+		msg.type == I_FIND_PARENT_REQUEST	|| msg.type == I_FIND_PARENT_RESPONSE	||
+		msg.type == I_HEARTBEAT_REQUEST			|| msg.type == I_HEARTBEAT_RESPONSE		||
+		msg.type == I_PING					|| msg.type == I_PONG					||
+		msg.type == I_REGISTRATION_REQUEST	)) {
 		SIGN_DEBUG(PSTR("Skipping security for command %d type %d\n"), mGetCommand(msg), msg.type);
 		return true;
 	} else if (mGetCommand(msg) == C_STREAM &&
@@ -104,8 +106,9 @@ static bool skipSign(MyMessage &msg) {
 // Helper to prepare a signing presentation message
 static void prepareSigningPresentation(MyMessage &msg, uint8_t destination) {
 	// Only supports version 1 for now
-	build(msg, _nc.nodeId, destination, NODE_SENSOR_ID, C_INTERNAL, I_SIGNING_PRESENTATION, false).set("");
+	build(msg, destination, NODE_SENSOR_ID, C_INTERNAL, I_SIGNING_PRESENTATION, false).set("");
 	mSetLength(msg, 2);
+	mSetPayloadType(msg, P_CUSTOM);		// displayed as hex
 	msg.data[0] = SIGNING_PRESENTATION_VERSION_1;
 	msg.data[1] = 0;
 }
@@ -129,8 +132,8 @@ void signerInit(void) {
 #endif
 }
 
-void signerPresentation(MyMessage &msg) {
-	prepareSigningPresentation(msg, GATEWAY_ADDRESS);
+void signerPresentation(MyMessage &msg, uint8_t destination) {
+	prepareSigningPresentation(msg, destination);
 
 #if defined(MY_SIGNING_REQUEST_SIGNATURES)
 	msg.data[1] |= SIGNING_PRESENTATION_REQUIRE_SIGNATURES;
@@ -141,12 +144,16 @@ void signerPresentation(MyMessage &msg) {
 	SIGN_DEBUG(PSTR("Whitelisting required\n"));
 #endif
 
-	_sendRoute(msg);
+	if (!_sendRoute(msg)) {
+		SIGN_DEBUG(PSTR("Failed to transmit signing presentation!"));
+	}
 
 #if defined(MY_SIGNING_FEATURE)
 	// If we do support signing, wait for the gateway to tell us how it prefer us to transmit our messages
-	SIGN_DEBUG(PSTR("Waiting for GW to send signing preferences...\n"));
-	wait(2000);
+	if (destination == GATEWAY_ADDRESS) {
+		SIGN_DEBUG(PSTR("Waiting for GW to send signing preferences...\n"));
+		wait(2000, C_INTERNAL, I_SIGNING_PRESENTATION);
+	}
 #endif
 }
 
@@ -161,7 +168,9 @@ bool signerProcessInternal(MyMessage &msg) {
 			prepareSigningPresentation(msg, sender);
 			SIGN_DEBUG(PSTR("Informing node %d that we do not require signatures because we do not support it\n"),
 				sender);
-			_sendRoute(msg);
+			if (!_sendRoute(msg)) {
+				SIGN_DEBUG(PSTR("Failed to transmit signing presentation!"));
+			}
 			return true; // No need to further process I_SIGNING_PRESENTATION in this case
 		}
 #elif defined(MY_SIGNING_FEATURE)
@@ -179,9 +188,11 @@ bool signerProcessInternal(MyMessage &msg) {
 #if defined(MY_SIGNING_ATSHA204)
 			if (signerAtsha204GetNonce(msg)) {
 #endif
-				SIGN_DEBUG(PSTR("Transmittng nonce\n"));
-				_sendRoute(build(msg, _nc.nodeId, msg.sender, NODE_SENSOR_ID,
-					C_INTERNAL, I_NONCE_RESPONSE, false));
+				if (!_sendRoute(build(msg, msg.sender, NODE_SENSOR_ID, C_INTERNAL, I_NONCE_RESPONSE, false))) {
+					SIGN_DEBUG(PSTR("Failed to transmit nonce!\n"));
+				} else {
+					SIGN_DEBUG(PSTR("Transmitted nonce\n"));
+				}
 			} else {
 				SIGN_DEBUG(PSTR("Failed to generate nonce!\n"));
 			}
@@ -245,7 +256,9 @@ bool signerProcessInternal(MyMessage &msg) {
 			} else {
 				SIGN_DEBUG(PSTR("Informing node %d that we do not require whitelisting\n"), sender);
 			}
-			_sendRoute(msg);
+			if (!_sendRoute(msg)) {
+				SIGN_DEBUG(PSTR("Failed to transmit signing presentation!"));
+			}
 #endif // MY_GATEWAY_FEATURE
 			return true; // No need to further process I_SIGNING_PRESENTATION
 		} else if (msg.type == I_NONCE_RESPONSE) {
@@ -301,8 +314,7 @@ bool signerSignMsg(MyMessage &msg) {
 		} else {
 			// Send nonce-request
 			_signingNonceStatus=SIGN_WAITING_FOR_NONCE;
-			if (!_sendRoute(build(_msgTmp, _nc.nodeId, msg.destination, msg.sensor,
-				C_INTERNAL, I_NONCE_REQUEST, false).set(""))) {
+			if (!_sendRoute(build(_msgSign, msg.destination, msg.sensor, C_INTERNAL, I_NONCE_REQUEST, false).set(""))) {
 				SIGN_DEBUG(PSTR("Failed to transmit nonce request!\n"));
 				return false;
 			}
@@ -404,4 +416,33 @@ void signerSha256Update(const uint8_t* data, size_t sz) {
 uint8_t* signerSha256Final(void) {
 	memcpy(sha256_hash, _soft_sha256.result(), 32);
 	return sha256_hash;
+}
+
+int signerMemcmp(const void* a, const void* b, size_t sz) {
+	int retVal;
+	size_t i;
+	int done = 0;
+	const uint8_t* ptrA = (const uint8_t*)a;
+	const uint8_t* ptrB = (const uint8_t*)b;
+	for (i=0; i < sz; i++) {
+		if (ptrA[i] == ptrB[i]) {
+			if (done > 0) {
+				done = 1;
+			} else {
+				done = 0;
+			}
+		}	else {
+			if (done > 0) {
+				done = 2;
+			} else {
+				done = 3;
+			}
+		}
+	}
+	if (done > 0) {
+		retVal = -1;
+	} else {
+		retVal = 0;
+	}
+	return retVal;
 }
