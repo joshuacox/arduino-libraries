@@ -5,9 +5,9 @@
  * repeater and gateway builds a routing tables in EEPROM which keeps track of the
  * network topology allowing messages to be routed to nodes.
  *
- * Created by Marcelo Aquino <marceloaqno@gmail.org>
- * Copyright (C) 2016 Marcelo Aquino
- * Full contributor list: https://github.com/mysensors/MySensors/graphs/contributors
+ * Created by Henrik Ekblad <henrik.ekblad@mysensors.org>
+ * Copyright (C) 2013-2017 Sensnology AB
+ * Full contributor list: https://github.com/mysensors/Arduino/graphs/contributors
  *
  * Documentation: http://www.mysensors.org
  * Support Forum: http://forum.mysensors.org
@@ -32,13 +32,16 @@
 #include "log.h"
 #include "EthernetClient.h"
 
-EthernetClient::EthernetClient() : _sock(-1) {
+EthernetClient::EthernetClient() : _sock(-1)
+{
 }
 
-EthernetClient::EthernetClient(int sock) : _sock(sock) {
+EthernetClient::EthernetClient(int sock) : _sock(sock)
+{
 }
 
-int EthernetClient::connect(const char* host, uint16_t port) {
+int EthernetClient::connect(const char* host, uint16_t port)
+{
 	int sockfd;
 	struct addrinfo hints, *servinfo, *p;
 	int rv;
@@ -51,21 +54,21 @@ int EthernetClient::connect(const char* host, uint16_t port) {
 
 	sprintf(port_str, "%hu", port);
 	if ((rv = getaddrinfo(host, port_str, &hints, &servinfo)) != 0) {
-			mys_log(LOG_ERR, "getaddrinfo: %s\n", gai_strerror(rv));
+		logError("getaddrinfo: %s\n", gai_strerror(rv));
 		return -1;
 	}
 
 	// loop through all the results and connect to the first we can
 	for (p = servinfo; p != NULL; p = p->ai_next) {
 		if ((sockfd = socket(p->ai_family, p->ai_socktype,
-				p->ai_protocol)) == -1) {
-			mys_log(LOG_ERR, "socket: %s\n", strerror(errno));
+		                     p->ai_protocol)) == -1) {
+			logError("socket: %s\n", strerror(errno));
 			continue;
 		}
 
 		if (::connect(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
 			close(sockfd);
-			mys_log(LOG_ERR, "connect: %s\n", strerror(errno));
+			logError("connect: %s\n", strerror(errno));
 			continue;
 		}
 
@@ -73,7 +76,7 @@ int EthernetClient::connect(const char* host, uint16_t port) {
 	}
 
 	if (p == NULL) {
-		mys_log(LOG_ERR, "failed to connect\n");
+		logError("failed to connect\n");
 		return -1;
 	}
 
@@ -81,23 +84,25 @@ int EthernetClient::connect(const char* host, uint16_t port) {
 
 	void *addr = &(((struct sockaddr_in*)p->ai_addr)->sin_addr);
 	inet_ntop(p->ai_family, addr, s, sizeof s);
-	mys_log(LOG_DEBUG, "connected to %s\n", s);
+	logDebug("connected to %s\n", s);
 
 	freeaddrinfo(servinfo); // all done with this structure
 
 	return 1;
 }
 
-int EthernetClient::connect(IPAddress ip, uint16_t port) {
+int EthernetClient::connect(IPAddress ip, uint16_t port)
+{
 	return connect(ip.toString().c_str(), port);
 }
 
-size_t EthernetClient::write(uint8_t b) {
+size_t EthernetClient::write(uint8_t b)
+{
 	return write(&b, 1);
 }
 
-size_t EthernetClient::write(const uint8_t *buf, size_t size) {
-	int rc = 0;
+size_t EthernetClient::write(const uint8_t *buf, size_t size)
+{
 	int bytes = 0;
 
 	if (_sock == -1) {
@@ -105,9 +110,9 @@ size_t EthernetClient::write(const uint8_t *buf, size_t size) {
 	}
 
 	while (size > 0) {
-		rc = send(_sock, buf + bytes, size, MSG_NOSIGNAL | MSG_DONTWAIT);
+		int rc = send(_sock, buf + bytes, size, MSG_NOSIGNAL | MSG_DONTWAIT);
 		if (rc == -1) {
-			mys_log(LOG_ERR, "send: %s\n", strerror(errno));
+			logError("send: %s\n", strerror(errno));
 			close(_sock);
 			_sock = -1;
 			break;
@@ -119,15 +124,20 @@ size_t EthernetClient::write(const uint8_t *buf, size_t size) {
 	return bytes;
 }
 
-size_t EthernetClient::write(const char *str) {
-	if (str == NULL) return 0;
+size_t EthernetClient::write(const char *str)
+{
+	if (str == NULL) {
+		return 0;
+	}
 	return write((const uint8_t *)str, strlen(str));
 }
-size_t EthernetClient::write(const char *buffer, size_t size) {
+size_t EthernetClient::write(const char *buffer, size_t size)
+{
 	return write((const uint8_t *)buffer, size);
 }
 
-int EthernetClient::available() {
+int EthernetClient::available()
+{
 	int count = 0;
 
 	if (_sock != -1) {
@@ -137,10 +147,10 @@ int EthernetClient::available() {
 	return 0;
 }
 
-int EthernetClient::read() {
+int EthernetClient::read()
+{
 	uint8_t b;
-	if ( recv(_sock, &b, 1, 0) > 0 )
-	{
+	if ( recv(_sock, &b, 1, 0) > 0 ) {
 		// recv worked
 		return b;
 	} else {
@@ -149,24 +159,29 @@ int EthernetClient::read() {
 	}
 }
 
-int EthernetClient::read(uint8_t *buf, size_t size) {
+int EthernetClient::read(uint8_t *buf, size_t size)
+{
 	return recv(_sock, buf, size, 0);
 }
 
-int EthernetClient::peek() {
+int EthernetClient::peek()
+{
 	uint8_t b;
 
 	return recv(_sock, &b, 1, MSG_PEEK | MSG_DONTWAIT);
 }
 
-void EthernetClient::flush() {
+void EthernetClient::flush()
+{
 	// There isn't much we can do here
 	return;
 }
 
-void EthernetClient::stop() {
-	if (_sock == -1)
+void EthernetClient::stop()
+{
+	if (_sock == -1) {
 		return;
+	}
 
 	// attempt to close the connection gracefully (send a FIN to other side)
 	shutdown(_sock, SHUT_RDWR);
@@ -178,57 +193,66 @@ void EthernetClient::stop() {
 	uint8_t s;
 	do {
 		s = status();
-		if (s == ETHERNETCLIENT_W5100_CLOSED)
+		if (s == ETHERNETCLIENT_W5100_CLOSED) {
 			break; // exit the loop
+		}
 		usleep(1000);
 		gettimeofday(&curTime, NULL);
-	} while (((curTime.tv_sec - startTime.tv_sec) * 1000000) + (curTime.tv_usec - startTime.tv_usec) < 1000000);
+	} while (((curTime.tv_sec - startTime.tv_sec) * 1000000) + (curTime.tv_usec - startTime.tv_usec) <
+	         1000000);
 
 	// if it hasn't closed, close it forcefully
-	if (s != ETHERNETCLIENT_W5100_CLOSED)
+	if (s != ETHERNETCLIENT_W5100_CLOSED) {
 		close(_sock);
-
+	}
 	_sock = -1;
 }
 
-uint8_t EthernetClient::status() {
-	if (_sock == -1) return ETHERNETCLIENT_W5100_CLOSED;
+uint8_t EthernetClient::status()
+{
+	if (_sock == -1) {
+		return ETHERNETCLIENT_W5100_CLOSED;
+	}
 
 	struct tcp_info tcp_info;
 	int tcp_info_length = sizeof(tcp_info);
 
-	if ( getsockopt( _sock, SOL_TCP, TCP_INFO, (void *)&tcp_info, (socklen_t *)&tcp_info_length ) == 0 ) {
+	if ( getsockopt( _sock, SOL_TCP, TCP_INFO, (void *)&tcp_info,
+	                 (socklen_t *)&tcp_info_length ) == 0 ) {
 		switch (tcp_info.tcpi_state) {
-			case TCP_ESTABLISHED:
-				return ETHERNETCLIENT_W5100_ESTABLISHED;
-			case TCP_SYN_SENT:
-				return ETHERNETCLIENT_W5100_SYNSENT;
-			case TCP_SYN_RECV:
-				return ETHERNETCLIENT_W5100_SYNRECV;
-			case TCP_FIN_WAIT1:
-			case TCP_FIN_WAIT2:
-				return ETHERNETCLIENT_W5100_FIN_WAIT;
-			case TCP_TIME_WAIT:
-				return TCP_TIME_WAIT;
-			case TCP_CLOSE:
-				return ETHERNETCLIENT_W5100_CLOSED;
-			case TCP_CLOSE_WAIT:
-				return ETHERNETCLIENT_W5100_CLOSING;
-			case TCP_LAST_ACK:
-				return ETHERNETCLIENT_W5100_LAST_ACK;
-			case TCP_LISTEN:
-				return ETHERNETCLIENT_W5100_LISTEN;
-			case TCP_CLOSING:
-				return ETHERNETCLIENT_W5100_CLOSING;
+		case TCP_ESTABLISHED:
+			return ETHERNETCLIENT_W5100_ESTABLISHED;
+		case TCP_SYN_SENT:
+			return ETHERNETCLIENT_W5100_SYNSENT;
+		case TCP_SYN_RECV:
+			return ETHERNETCLIENT_W5100_SYNRECV;
+		case TCP_FIN_WAIT1:
+		case TCP_FIN_WAIT2:
+			return ETHERNETCLIENT_W5100_FIN_WAIT;
+		case TCP_TIME_WAIT:
+			return TCP_TIME_WAIT;
+		case TCP_CLOSE:
+			return ETHERNETCLIENT_W5100_CLOSED;
+		case TCP_CLOSE_WAIT:
+			return ETHERNETCLIENT_W5100_CLOSING;
+		case TCP_LAST_ACK:
+			return ETHERNETCLIENT_W5100_LAST_ACK;
+		case TCP_LISTEN:
+			return ETHERNETCLIENT_W5100_LISTEN;
+		case TCP_CLOSING:
+			return ETHERNETCLIENT_W5100_CLOSING;
 		}
 	}
 
 	return ETHERNETCLIENT_W5100_CLOSED;
 }
 
-uint8_t EthernetClient::connected() {
-	if (_sock == -1) return 0;
-	
+uint8_t EthernetClient::connected()
+{
+	if (_sock == -1) {
+		return 0;
+	}
+
 	if (peek() < 0) {
 		if (errno == EAGAIN) {
 			return 1;
@@ -238,17 +262,20 @@ uint8_t EthernetClient::connected() {
 	return 1;
 }
 
-int EthernetClient::getSocketNumber() {
+int EthernetClient::getSocketNumber()
+{
 	return _sock;
 }
 
 // the next function allows us to use the client returned by
 // EthernetServer::available() as the condition in an if-statement.
 
-EthernetClient::operator bool() {
+EthernetClient::operator bool()
+{
 	return _sock != -1;
 }
 
-bool EthernetClient::operator==(const EthernetClient& rhs) {
+bool EthernetClient::operator==(const EthernetClient& rhs)
+{
 	return _sock == rhs._sock && _sock != -1 && rhs._sock != -1;
 }

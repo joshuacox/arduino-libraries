@@ -5,9 +5,9 @@
  * repeater and gateway builds a routing tables in EEPROM which keeps track of the
  * network topology allowing messages to be routed to nodes.
  *
- * Created by Marcelo Aquino <marceloaqno@gmail.org>
- * Copyright (C) 2016 Marcelo Aquino
- * Full contributor list: https://github.com/mysensors/MySensors/graphs/contributors
+ * Created by Henrik Ekblad <henrik.ekblad@mysensors.org>
+ * Copyright (C) 2013-2017 Sensnology AB
+ * Full contributor list: https://github.com/mysensors/Arduino/graphs/contributors
  *
  * Documentation: http://www.mysensors.org
  * Support Forum: http://forum.mysensors.org
@@ -32,7 +32,8 @@
 #include "EthernetClient.h"
 #include "EthernetServer.h"
 
-EthernetServer::EthernetServer(uint16_t port, uint16_t max_clients) : port(port), max_clients(max_clients)
+EthernetServer::EthernetServer(uint16_t port, uint16_t max_clients) : port(port),
+	max_clients(max_clients), sockfd(-1)
 {
 	clients.reserve(max_clients);
 }
@@ -57,26 +58,26 @@ void EthernetServer::begin(IPAddress address)
 
 	sprintf(portstr, "%d", port);
 	if ((rv = getaddrinfo(address.toString().c_str(), portstr, &hints, &servinfo)) != 0) {
-		mys_log(LOG_ERR, "getaddrinfo: %s\n", gai_strerror(rv));
+		logError("getaddrinfo: %s\n", gai_strerror(rv));
 		return;
 	}
 
 	// loop through all the results and bind to the first we can
 	for (p = servinfo; p != NULL; p = p->ai_next) {
 		if ((sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
-			mys_log(LOG_ERR, "socket: %s\n", strerror(errno));
+			logError("socket: %s\n", strerror(errno));
 			continue;
 		}
 
 		if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1) {
-			mys_log(LOG_ERR, "setsockopt: %s\n", strerror(errno));
+			logError("setsockopt: %s\n", strerror(errno));
 			freeaddrinfo(servinfo);
 			return;
 		}
 
 		if (bind(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
 			close(sockfd);
-			mys_log(LOG_ERR, "bind: %s\n", strerror(errno));
+			logError("bind: %s\n", strerror(errno));
 			continue;
 		}
 
@@ -84,13 +85,13 @@ void EthernetServer::begin(IPAddress address)
 	}
 
 	if (p == NULL)  {
-		mys_log(LOG_ERR, "failed to bind\n");
+		logError("Failed to bind!\n");
 		freeaddrinfo(servinfo);
 		return;
 	}
 
 	if (listen(sockfd, ETHERNETSERVER_BACKLOG) == -1) {
-		mys_log(LOG_ERR, "listen: %s\n", strerror(errno));
+		logError("listen: %s\n", strerror(errno));
 		freeaddrinfo(servinfo);
 		return;
 	}
@@ -102,7 +103,7 @@ void EthernetServer::begin(IPAddress address)
 	struct sockaddr_in *ipv4 = (struct sockaddr_in *)p->ai_addr;
 	void *addr = &(ipv4->sin_addr);
 	inet_ntop(p->ai_family, addr, ipstr, sizeof ipstr);
-	mys_log(LOG_DEBUG, "Listening for connections on %s:%s\n", ipstr, portstr);
+	logDebug("Listening for connections on %s:%s\n", ipstr, portstr);
 }
 
 bool EthernetServer::hasClient()
@@ -142,7 +143,7 @@ size_t EthernetServer::write(const uint8_t *buffer, size_t size)
 			client.stop();
 			clients[i] = clients.back();
 			clients.pop_back();
-			mys_log(LOG_DEBUG, "Client disconnected.");
+			logDebug("Client disconnected.\n");
 		}
 	}
 
@@ -151,7 +152,9 @@ size_t EthernetServer::write(const uint8_t *buffer, size_t size)
 
 size_t EthernetServer::write(const char *str)
 {
-	if (str == NULL) return 0;
+	if (str == NULL) {
+		return 0;
+	}
 	return write((const uint8_t *)str, strlen(str));
 }
 
@@ -192,7 +195,7 @@ void EthernetServer::_accept()
 			}
 		}
 		if (no_free_slots) {
-			mys_log(LOG_DEBUG, "Max number of ethernet clients reached.");
+			logDebug("Max number of ethernet clients reached.\n");
 			return;
 		}
 	}
@@ -201,7 +204,7 @@ void EthernetServer::_accept()
 	new_fd = accept(sockfd, (struct sockaddr *)&client_addr, &sin_size);
 	if (new_fd == -1) {
 		if (errno != EAGAIN && errno != EWOULDBLOCK) {
-			mys_log(LOG_ERR, "accept: %s\n", strerror(errno));
+			logError("accept: %s\n", strerror(errno));
 		}
 		return;
 	}
@@ -211,5 +214,5 @@ void EthernetServer::_accept()
 
 	void *addr = &(((struct sockaddr_in*)&client_addr)->sin_addr);
 	inet_ntop(client_addr.ss_family, addr, ipstr, sizeof ipstr);
-	mys_log(LOG_DEBUG, "New connection from %s\n", ipstr);
+	logDebug("New connection from %s\n", ipstr);
 }
